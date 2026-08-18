@@ -5,6 +5,8 @@ import { BookCard } from '@/components/BookCard';
 import { BookRecord } from '@/lib/db';
 import { BookOpen, Search, ArrowUpDown, Loader2, Sparkles, FolderPlus } from 'lucide-react';
 
+import { getApiUrl } from '@/lib/config';
+
 type SortOption = 'recently_opened' | 'title' | 'author' | 'progress' | 'recently_added';
 
 export default function HomeLibraryPage() {
@@ -17,7 +19,7 @@ export default function HomeLibraryPage() {
     async function loadLibrary() {
       try {
         setLoading(true);
-        const res = await fetch('/api/books');
+        const res = await fetch(getApiUrl('/api/books'));
         if (res.ok) {
           const data: any = await res.json();
           setBooks(data.books || []);

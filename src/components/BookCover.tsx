@@ -3,6 +3,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { BookOpen } from 'lucide-react';
 
+import { getAssetUrl } from '@/lib/config';
+
 interface BookCoverProps {
   url: string;
   title: string;
@@ -23,11 +25,10 @@ export const BookCover: React.FC<BookCoverProps> = ({ url, title, author, classN
         setLoading(true);
         setError(false);
         const pdfjs = await import('pdfjs-dist');
-        if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-          pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
-        }
+        pdfjs.GlobalWorkerOptions.workerSrc = getAssetUrl('/pdf.worker.min.mjs');
 
-        const loadingTask = pdfjs.getDocument({ url });
+        const pdfUrl = getAssetUrl(url);
+        const loadingTask = pdfjs.getDocument({ url: pdfUrl });
         const pdf = await loadingTask.promise;
         if (isCancelled) return;
 

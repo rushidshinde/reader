@@ -9,6 +9,8 @@ import { SettingsDrawer } from '@/components/reader/SettingsDrawer';
 import { BookRecord, Bookmark, ReaderSettings } from '@/lib/db';
 import { Loader2, AlertCircle } from 'lucide-react';
 
+import { getApiUrl } from '@/lib/config';
+
 interface PageProps {
   params: Promise<{ bookId: string }>;
 }
@@ -79,9 +81,9 @@ export default function ReaderPage({ params }: PageProps) {
         setError(null);
 
         const [bookRes, bookmarksRes, settingsRes] = await Promise.all([
-          fetch(`/api/books/${bookId}`),
-          fetch(`/api/bookmarks?bookId=${bookId}`),
-          fetch('/api/settings')
+          fetch(getApiUrl(`/api/books/${bookId}`)),
+          fetch(getApiUrl(`/api/bookmarks?bookId=${bookId}`)),
+          fetch(getApiUrl('/api/settings'))
         ]);
 
         if (!bookRes.ok) {
@@ -116,7 +118,7 @@ export default function ReaderPage({ params }: PageProps) {
     setSettings(updated);
 
     try {
-      await fetch('/api/settings', {
+      await fetch(getApiUrl('/api/settings'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newSettings)
@@ -137,7 +139,7 @@ export default function ReaderPage({ params }: PageProps) {
       }
     } else {
       try {
-        const res = await fetch('/api/bookmarks', {
+        const res = await fetch(getApiUrl('/api/bookmarks'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -159,7 +161,7 @@ export default function ReaderPage({ params }: PageProps) {
   const handleDeleteBookmark = async (id: string) => {
     setBookmarks(prev => prev.filter(b => b.id !== id));
     try {
-      await fetch(`/api/bookmarks?id=${id}`, { method: 'DELETE' });
+      await fetch(getApiUrl(`/api/bookmarks?id=${id}`), { method: 'DELETE' });
     } catch (err) {
       console.warn('Failed to delete bookmark:', err);
     }

@@ -1,5 +1,4 @@
 import path from 'path';
-import fs from 'fs';
 import generatedBooks from './generated-books.json';
 
 export interface BookRecord {
@@ -45,18 +44,111 @@ export interface ReaderSettings {
   updated_at: string;
 }
 
+// Helpers for dynamic live directory scanning in Node environment
+function cleanTitleFromFilename(fileName: string): { title: string; author?: string } {
+  let name = fileName.replace(/\.pdf$/i, '');
+  name = name.replace(/\(z-lib\.org\)/gi, '').trim();
+
+  let author: string | undefined = undefined;
+  const authorMatch = name.match(/\(([A-Z][a-z]+(?:\s*,\s*[A-Z][a-z]+)?)\)/);
+  if (authorMatch) {
+    const rawAuthor = authorMatch[1];
+    if (rawAuthor.includes(',')) {
+      const parts = rawAuthor.split(',').map(s => s.trim());
+      author = `${parts[1]} ${parts[0]}`;
+    } else {
+      author = rawAuthor;
+    }
+    name = name.replace(authorMatch[0], '').trim();
+  }
+
+  if (!name.includes(' ') && (name.includes('-') || name.includes('_'))) {
+    name = name.replace(/[-_]+/g, ' ');
+  }
+
+  const words = name.split(/\s+/).map(word => {
+    if (word.startsWith('(') && word.endsWith(')')) {
+      const inner = word.slice(1, -1);
+      return `(${inner.charAt(0).toUpperCase() + inner.slice(1)})`;
+    }
+    return word.charAt(0).toUpperCase() + word.slice(1);
+  });
+
+  const title = words.join(' ').replace(/\s+/g, ' ').trim();
+  return { title, author };
+}
+
+function generateSlug(fileName: string): string {
+  let name = fileName.replace(/\.pdf$/i, '');
+  name = name.replace(/\(z-lib\.org\)/gi, '');
+  name = name.toLowerCase();
+  let slug = name.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return slug || 'book';
+}
+
+function discoverBooksLive(): { id: string; title: string; author?: string; fileName: string; filePath: string; url: string }[] {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const rootDir = process.cwd();
+    const possibleDirs = [
+      path.join(rootDir, 'public', 'books'),
+      path.join(rootDir, 'public', 'book')
+    ];
+
+    const discovered: any[] = [];
+    const usedSlugs = new Set<string>();
+
+    for (const dirPath of possibleDirs) {
+      if (fs.existsSync(/*turbopackIgnore: true*/ dirPath)) {
+        const dirName = path.basename(dirPath);
+        const files = fs.readdirSync(/*turbopackIgnore: true*/ dirPath);
+        for (const file of files) {
+          if (typeof file === 'string' && file.toLowerCase().endsWith('.pdf')) {
+            let slug = generateSlug(file);
+            if (usedSlugs.has(slug)) {
+              let counter = 2;
+              while (usedSlugs.has(`${slug}-${counter}`)) {
+                counter++;
+              }
+              slug = `${slug}-${counter}`;
+            }
+            usedSlugs.add(slug);
+
+            const { title, author } = cleanTitleFromFilename(file);
+            discovered.push({
+              id: slug,
+              title,
+              author,
+              fileName: file,
+              filePath: `/public/${dirName}/${file}`,
+              url: `/${dirName}/${encodeURIComponent(file)}`
+            });
+          }
+        }
+      }
+    }
+
+    if (discovered.length > 0) {
+      return discovered;
+    }
+  } catch (e) {
+    // Edge environment or fs unavailable
+  }
+
+  return generatedBooks as any[];
+}
+
 // Global reference for local SQLite fallback during next dev
 let sqliteDb: any = null;
 
 function getLocalSqlite() {
   if (!sqliteDb) {
-    // Dynamic import better-sqlite3 to prevent issues in Cloudflare bundle if tree-shaken
     const Database = require('better-sqlite3');
     const dbPath = path.join(process.cwd(), '.local-d1.sqlite');
     sqliteDb = new Database(dbPath);
     sqliteDb.pragma('journal_mode = WAL');
 
-    // Run migrations
     sqliteDb.exec(`
       CREATE TABLE IF NOT EXISTS books (
         id TEXT PRIMARY KEY,
@@ -105,32 +197,95 @@ function getLocalSqlite() {
   return sqliteDb;
 }
 
+// Automatically create D1 tables if they don't exist yet
+let d1Initialized = false;
+
+async function ensureD1Tables(d1: D1Database): Promise<void> {
+  if (d1Initialized) return;
+  try {
+    await d1.exec(`
+      CREATE TABLE IF NOT EXISTS books (
+        id TEXT PRIMARY KEY,
+        file_name TEXT NOT NULL,
+        file_path TEXT NOT NULL UNIQUE,
+        title TEXT NOT NULL,
+        author TEXT,
+        page_count INTEGER,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS reading_progress (
+        book_id TEXT PRIMARY KEY,
+        current_page INTEGER NOT NULL DEFAULT 1,
+        progress_percentage REAL NOT NULL DEFAULT 0,
+        scroll_position REAL DEFAULT 0,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS bookmarks (
+        id TEXT PRIMARY KEY,
+        book_id TEXT NOT NULL,
+        page INTEGER NOT NULL,
+        label TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS reader_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        theme TEXT NOT NULL DEFAULT 'light',
+        brightness REAL NOT NULL DEFAULT 1,
+        zoom REAL NOT NULL DEFAULT 1,
+        reading_mode TEXT NOT NULL DEFAULT 'continuous',
+        page_width TEXT NOT NULL DEFAULT 'comfortable',
+        show_controls INTEGER NOT NULL DEFAULT 1,
+        updated_at TEXT NOT NULL
+      );
+
+      INSERT OR IGNORE INTO reader_settings (id, theme, brightness, zoom, reading_mode, page_width, show_controls, updated_at)
+      VALUES (1, 'light', 1.0, 1.0, 'continuous', 'comfortable', 1, datetime('now'));
+    `);
+    d1Initialized = true;
+  } catch (err) {
+    console.warn('Failed to auto-create D1 tables:', err);
+  }
+}
+
 // Get Cloudflare D1 database binding if available in context
 async function getD1(): Promise<D1Database | null> {
+  let d1Instance: D1Database | null = null;
   try {
     const { getCloudflareContext } = await import('@opennextjs/cloudflare');
     const ctx = getCloudflareContext();
     if (ctx?.env?.DB) {
-      return ctx.env.DB as D1Database;
+      d1Instance = ctx.env.DB as D1Database;
     }
   } catch (e) {
     // Not running under OpenNext Cloudflare runtime
   }
 
-  // Fallback to process.env.DB if attached
-  if ((globalThis as any).DB) {
-    return (globalThis as any).DB;
+  if (!d1Instance && (globalThis as any).DB) {
+    d1Instance = (globalThis as any).DB;
   }
+
+  if (d1Instance) {
+    await ensureD1Tables(d1Instance);
+    return d1Instance;
+  }
+
   return null;
 }
 
 // Sync books manifest into Database
 export async function syncBooksManifest(): Promise<void> {
+  const booksToSync = discoverBooksLive();
   const d1 = await getD1();
   const now = new Date().toISOString();
 
   if (d1) {
-    const statements = generatedBooks.map(book => {
+    const statements = booksToSync.map(book => {
       return d1.prepare(`
         INSERT INTO books (id, file_name, file_path, title, author, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -157,7 +312,7 @@ export async function syncBooksManifest(): Promise<void> {
         author = excluded.author;
     `);
 
-    for (const book of generatedBooks) {
+    for (const book of booksToSync) {
       stmt.run(book.id, book.fileName, book.filePath, book.title, book.author || null, now, now);
     }
   }
@@ -166,9 +321,10 @@ export async function syncBooksManifest(): Promise<void> {
 // Get All Books with Progress
 export async function getAllBooks(): Promise<BookRecord[]> {
   await syncBooksManifest();
+  const booksToSync = discoverBooksLive();
   const d1 = await getD1();
 
-  const manifestMap = new Map(generatedBooks.map(b => [b.id, b.url]));
+  const manifestMap = new Map(booksToSync.map(b => [b.id, b.url]));
 
   const query = `
     SELECT 
@@ -208,9 +364,10 @@ export async function getAllBooks(): Promise<BookRecord[]> {
 // Get Single Book By ID
 export async function getBookById(id: string): Promise<BookRecord | null> {
   await syncBooksManifest();
+  const booksToSync = discoverBooksLive();
   const d1 = await getD1();
 
-  const manifestBook = generatedBooks.find(b => b.id === id);
+  const manifestBook = booksToSync.find(b => b.id === id);
   if (!manifestBook) return null;
 
   const query = `

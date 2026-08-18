@@ -4,6 +4,8 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { ReaderSettings } from '@/lib/db';
 
+import { getApiUrl, getAssetUrl } from '@/lib/config';
+
 interface PdfViewerProps {
   url: string;
   bookId: string;
@@ -45,11 +47,10 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         setError(null);
 
         const pdfjs = await import('pdfjs-dist');
-        if (!pdfjs.GlobalWorkerOptions.workerSrc) {
-          pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
-        }
+        pdfjs.GlobalWorkerOptions.workerSrc = getAssetUrl('/pdf.worker.min.mjs');
 
-        const loadingTask = pdfjs.getDocument({ url });
+        const pdfUrl = getAssetUrl(url);
+        const loadingTask = pdfjs.getDocument({ url: pdfUrl });
         const doc = await loadingTask.promise;
 
         if (isCancelled) return;
@@ -94,7 +95,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     }
 
     saveTimeoutRef.current = setTimeout(() => {
-      fetch('/api/progress', {
+      fetch(getApiUrl('/api/progress'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -121,7 +122,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden' && numPages > 0) {
         const progress = Math.min(100, Math.round((currentPage / numPages) * 100 * 10) / 10);
-        navigator.sendBeacon('/api/progress', JSON.stringify({
+        navigator.sendBeacon(getApiUrl('/api/progress'), JSON.stringify({
           bookId,
           currentPage,
           progressPercentage: progress,
