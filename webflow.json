@@ -1,11 +1,12 @@
 {
   "cloud": {
-    "framework": "nextjs",
     "contract_version": "1",
-    "deployment_type": "ssr",
+    "framework": "nextjs",
+    "framework_version": "16.3.1",
     "entrypoint_path": "./worker.js",
+    "deployment_type": "ssr",
     "skip_no_bundle": false,
-    "framework_version": "16.3.1"
+    "app_id": "1b26086f-d361-4c0b-8f05-f67ebed52c0c"
   },
   "devlink-export": {
     "rootDir": "./src/webflow",
