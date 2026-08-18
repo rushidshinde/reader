@@ -1,0 +1,93 @@
+[
+  {
+    "id": "a-secret-revealed",
+    "title": "A Secret Revealed",
+    "fileName": "A Secret Revealed.pdf",
+    "filePath": "/public/books/A Secret Revealed.pdf",
+    "url": "/books/A%20Secret%20Revealed.pdf"
+  },
+  {
+    "id": "raavan-aryavart-ka-shatru-hindi",
+    "title": "Raavan Aryavart Ka Shatru",
+    "author": "Hindi",
+    "fileName": "Raavan Aryavart Ka Shatru (Hindi).pdf",
+    "filePath": "/public/books/Raavan Aryavart Ka Shatru (Hindi).pdf",
+    "url": "/books/Raavan%20Aryavart%20Ka%20Shatru%20(Hindi).pdf"
+  },
+  {
+    "id": "scion-of-ikshvaku-marathi",
+    "title": "Scion Of Ikshvaku",
+    "author": "Marathi",
+    "fileName": "Scion Of Ikshvaku (Marathi).pdf",
+    "filePath": "/public/books/Scion Of Ikshvaku (Marathi).pdf",
+    "url": "/books/Scion%20Of%20Ikshvaku%20(Marathi).pdf"
+  },
+  {
+    "id": "sita-warrior-of-mithila-marathi",
+    "title": "Sita Warrior Of Mithila",
+    "author": "Marathi",
+    "fileName": "Sita Warrior Of Mithila (Marathi).pdf",
+    "filePath": "/public/books/Sita Warrior Of Mithila (Marathi).pdf",
+    "url": "/books/Sita%20Warrior%20Of%20Mithila%20(Marathi).pdf"
+  },
+  {
+    "id": "the-alchemist-marathi-edition",
+    "title": "The Alchemist (Marathi Edition)",
+    "fileName": "The Alchemist (Marathi Edition).pdf",
+    "filePath": "/public/books/The Alchemist (Marathi Edition).pdf",
+    "url": "/books/The%20Alchemist%20(Marathi%20Edition).pdf"
+  },
+  {
+    "id": "the-immortals-of-meluha-marathi",
+    "title": "The Immortals Of Meluha",
+    "author": "Marathi",
+    "fileName": "The Immortals Of Meluha (Marathi).pdf",
+    "filePath": "/public/books/The Immortals Of Meluha (Marathi).pdf",
+    "url": "/books/The%20Immortals%20Of%20Meluha%20(Marathi).pdf"
+  },
+  {
+    "id": "the-mahabharata-quest-the-alexander-secret",
+    "title": "The Mahabharata Quest The Alexander Secret",
+    "fileName": "The Mahabharata Quest The Alexander Secret.pdf",
+    "filePath": "/public/books/The Mahabharata Quest The Alexander Secret.pdf",
+    "url": "/books/The%20Mahabharata%20Quest%20The%20Alexander%20Secret.pdf"
+  },
+  {
+    "id": "the-mahabharata-quest-the-secret-of-the-druids",
+    "title": "The Mahabharata Quest The Secret Of The Druids",
+    "fileName": "The Mahabharata Quest The Secret of the Druids.pdf",
+    "filePath": "/public/books/The Mahabharata Quest The Secret of the Druids.pdf",
+    "url": "/books/The%20Mahabharata%20Quest%20The%20Secret%20of%20the%20Druids.pdf"
+  },
+  {
+    "id": "the-mahabharata-secret",
+    "title": "The Mahabharata Secret",
+    "fileName": "The Mahabharata Secret.pdf",
+    "filePath": "/public/books/The Mahabharata Secret.pdf",
+    "url": "/books/The%20Mahabharata%20Secret.pdf"
+  },
+  {
+    "id": "the-oath-of-the-vayuputras-marathi",
+    "title": "The Oath Of The Vayuputras",
+    "author": "Marathi",
+    "fileName": "The Oath Of The Vayuputras (Marathi).pdf",
+    "filePath": "/public/books/The Oath Of The Vayuputras (Marathi).pdf",
+    "url": "/books/The%20Oath%20Of%20The%20Vayuputras%20(Marathi).pdf"
+  },
+  {
+    "id": "the-secret-of-the-nagas-marathi",
+    "title": "The Secret Of The Nagas",
+    "author": "Marathi",
+    "fileName": "The Secret Of The Nagas (Marathi).pdf",
+    "filePath": "/public/books/The Secret Of The Nagas (Marathi).pdf",
+    "url": "/books/The%20Secret%20Of%20The%20Nagas%20(Marathi).pdf"
+  },
+  {
+    "id": "war-of-lanka-ram-chandra-series-book-4-tripathi-amish",
+    "title": "War Of Lanka (Ram Chandra Series Book 4)",
+    "author": "Amish Tripathi",
+    "fileName": "War Of Lanka (Ram Chandra Series Book 4) (Tripathi, Amish) (z-lib.org).pdf",
+    "filePath": "/public/books/War Of Lanka (Ram Chandra Series Book 4) (Tripathi, Amish) (z-lib.org).pdf",
+    "url": "/books/War%20Of%20Lanka%20(Ram%20Chandra%20Series%20Book%204)%20(Tripathi%2C%20Amish)%20(z-lib.org).pdf"
+  }
+]

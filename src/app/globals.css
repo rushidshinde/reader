@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --background: #fcfcfc;
+    --foreground: #18181b;
+    --card: #ffffff;
+    --card-foreground: #18181b;
+    --primary: #2563eb;
+    --primary-foreground: #ffffff;
+    --muted: #f4f4f5;
+    --muted-foreground: #71717a;
+    --border: #e4e4e7;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: #0f1115;
+    --foreground: #f4f4f5;
+    --card: #16181d;
+    --card-foreground: #f4f4f5;
+    --primary: #3b82f6;
+    --primary-foreground: #ffffff;
+    --muted: #27272a;
+    --muted-foreground: #a1a1aa;
+    --border: #27272a;
+  }
+
+  .theme-sepia {
+    --background: #f8f1e5;
+    --foreground: #433422;
+    --card: #f2e7d5;
+    --card-foreground: #433422;
+    --primary: #8c531b;
+    --primary-foreground: #ffffff;
+    --muted: #e8d9c5;
+    --muted-foreground: #7c6853;
+    --border: #e0d0b8;
+  }
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  overflow-x: hidden;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(160, 160, 160, 0.3);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(160, 160, 160, 0.5);
+}
+
+/* Dark mode canvas filter */
+.dark-pdf-canvas {
+  filter: invert(90%) hue-rotate(180deg) contrast(95%);
+}
+
+.sepia-pdf-canvas {
+  filter: sepia(40%) contrast(90%);
+}
+
+/* Smooth transitions */
+.transition-reader {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
