@@ -1,7 +1,6 @@
 {
   "cloud": {
     "framework": "nextjs",
-    "app_id": "d557fd07-81ab-486c-b965-871c61ca0a93",
     "contract_version": "1",
     "deployment_type": "ssr",
     "entrypoint_path": "./worker.js",
