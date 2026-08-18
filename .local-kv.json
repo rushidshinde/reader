@@ -139,5 +139,15 @@
     "progress_percentage": 70.1,
     "scroll_position": 0,
     "updated_at": "2026-08-18T17:27:19.405Z"
+  },
+  "reader_settings": {
+    "id": 1,
+    "theme": "light",
+    "brightness": 1,
+    "zoom": 1,
+    "reading_mode": "continuous",
+    "page_width": "comfortable",
+    "show_controls": 1,
+    "updated_at": "2026-08-18T17:36:13.510Z"
   }
 }

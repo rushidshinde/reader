@@ -423,7 +423,12 @@ const DEFAULT_SETTINGS: ReaderSettings = {
 
 export async function getReaderSettings(): Promise<ReaderSettings> {
   const settings = await kvGet<ReaderSettings>('reader_settings');
-  return settings || DEFAULT_SETTINGS;
+  if (!settings) {
+    const initialSettings = { ...DEFAULT_SETTINGS, updated_at: new Date().toISOString() };
+    await kvPut('reader_settings', initialSettings);
+    return initialSettings;
+  }
+  return settings;
 }
 
 export async function saveReaderSettings(settings: Partial<ReaderSettings>): Promise<ReaderSettings> {
