@@ -351,6 +351,7 @@ export async function syncBooksManifest(): Promise<void> {
 
   const { d1, localSqlite } = await ensureTables();
   const now = new Date().toISOString();
+  const activeIds = booksToSync.map(b => b.id);
 
   if (d1) {
     const statements = booksToSync.map(book => {
@@ -359,6 +360,15 @@ export async function syncBooksManifest(): Promise<void> {
         VALUES (?, ?, ?, ?, ?, ?, ?);
       `).bind(book.id, book.fileName, book.filePath, book.title, book.author || null, now, now);
     });
+
+    if (activeIds.length > 0) {
+      const placeholders = activeIds.map(() => '?').join(',');
+      statements.push(
+        d1.prepare(`DELETE FROM books WHERE id NOT IN (${placeholders});`).bind(...activeIds)
+      );
+    } else {
+      statements.push(d1.prepare(`DELETE FROM books;`));
+    }
 
     if (statements.length > 0) {
       try {
@@ -376,11 +386,26 @@ export async function syncBooksManifest(): Promise<void> {
       for (const book of booksToSync) {
         stmt.run(book.id, book.fileName, book.filePath, book.title, book.author || null, now, now);
       }
+
+      if (activeIds.length > 0) {
+        const placeholders = activeIds.map(() => '?').join(',');
+        localSqlite.prepare(`DELETE FROM books WHERE id NOT IN (${placeholders});`).run(...activeIds);
+      } else {
+        localSqlite.prepare(`DELETE FROM books;`).run();
+      }
     } catch (err) {
       console.error('Failed to insert books into local SQLite:', err);
     }
   } else {
     const store = getLocalStore();
+    const activeSet = new Set(activeIds);
+    for (const bookId of Object.keys(store.books)) {
+      if (!activeSet.has(bookId)) {
+        delete store.books[bookId];
+        delete store.reading_progress[bookId];
+        store.bookmarks = store.bookmarks.filter(b => b.book_id !== bookId);
+      }
+    }
     for (const book of booksToSync) {
       if (!store.books[book.id]) {
         store.books[book.id] = {
