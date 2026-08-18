@@ -1,84 +1,164 @@
-# Next.js + Webflow Cloud
+# 📖 Personal Kindle-Like PDF Reader
 
-Example [Next.js](https://nextjs.org) app for [Webflow Cloud](https://webflow.com/cloud), using the App Router, [OpenNext](https://opennext.js.org) for Cloudflare Workers, and Wrangler. Use it as a starting point or reference when deploying Next.js on Webflow Cloud.
+A polished, single-user personal Kindle & Apple Books-inspired PDF library and reader web application built with **Next.js (App Router)**, **TypeScript**, **Tailwind CSS**, **Cloudflare D1**, **Wrangler**, and **PDF.js**.
 
-[![Deploy to Webflow](https://webflow.com/img/deploy-dark.svg)](https://webflow.com/dashboard/cloud/deploy?repo=https://github.com/Webflow-Examples/hello-world-nextjs-devlink)
+Designed for seamless reading across all your devices:
+> **Open website → select a PDF → read → close browser → return later from any device → automatically continue from exactly where you stopped.**
 
-## Project structure
+---
+
+## ✨ Features
+
+- 📚 **Automatic Book Discovery**: Discovers `.pdf` files from `public/books/` or `public/book/` and automatically formats titles and author tags without manual database entry.
+- ⚡ **Last Page Persistence**: Loads saved reading progress directly from Cloudflare D1 / local database and opens books immediately at your last page without blinking to page 1 first.
+- 🎨 **Kindle & Apple Books Aesthetic**:
+  - **Home Library**: Featured *Continue Reading* hero section with reading progress percentage, current page counter, search bar, and sorting controls.
+  - **Distraction-Free Reader**: Auto-hiding header and floating controls toolbar that disappear after inactivity.
+- 🌗 **Themes & Controls**:
+  - **Themes**: Light, Sepia (warm e-reader tone), and Dark mode.
+  - **Brightness Overlay**: Adjustable screen brightness slider (20% – 100%).
+  - **Zoom & Layout**: 50% – 250% zoom scale, Page Max Width selection (Compact, Comfortable, Wide, Full Width).
+  - **Reading Modes**: Continuous Scroll mode and Page-by-Page mode.
+  - **Bookmarks**: Bookmark any page (`🔖`), open bookmarks drawer, and jump directly to bookmarked pages.
+- ⌨️ **Keyboard Shortcuts**: Complete keyboard navigation support.
+- 🔗 **Subpath Mounting Support**: Pre-configured with `basePath: "/reader"` to mount seamlessly as a sub-app under `/reader` on any existing parent domain or Webflow site.
+- 🔒 **Zero Auth / Zero Upload Complexity**: Personal single-user web app — no signup, login, PDF uploads, or deletions. Static files are the source of truth for books.
+
+---
+
+## 🏗️ Architecture & Data Flow
+
+```text
+               ┌─────────────────────────────┐
+               │        public/books/        │
+               │                             │
+               │  atomic-habits.pdf          │
+               │  deep-work.pdf              │
+               └──────────────┬──────────────┘
+                              │
+                    Build / Live Scanner
+                              │
+                              ▼
+               ┌─────────────────────────────┐
+               │    src/lib/db.ts Sync       │
+               └──────────────┬──────────────┘
+                              │
+                              ▼
+               ┌─────────────────────────────┐
+               │        PDF Reader           │
+               │  /reader/read/[bookId]      │
+               └──────────────┬──────────────┘
+                              │
+                     Reading state & settings
+                              │
+                              ▼
+               ┌─────────────────────────────┐
+               │       Cloudflare D1         │
+               │   (or local .local-db.json) │
+               └─────────────────────────────┘
+```
+
+- **Filesystem**: Stores actual PDF binary files in `public/books/`.
+- **Cloudflare D1 / Local DB**: Stores metadata, reading progress, bookmarks, and reader preferences. Binary PDFs are **never** stored in D1.
+
+---
+
+## 📁 Project Structure
 
 ```text
 .
-├── .gitignore
+├── migrations/
+│   └── 0001_initial.sql           # D1 database schema
 ├── public/
-│   ├── next.svg
-│   └── webflow.svg
+│   ├── books/                     # PDF books directory (Source of Truth)
+│   └── pdf.worker.min.mjs         # PDF.js web worker asset
+├── scripts/
+│   ├── generate-books.ts          # Manifest generator script
+│   └── copy-pdf-worker.js         # PDF worker copy script
 ├── src/
-│   └── app/
-│       ├── api/
-│       │   └── hello/
-│       ├── favicon.ico
-│       ├── globals.css
-│       ├── layout.tsx
-│       └── page.tsx
-├── LICENSE
-├── cloudflare-env.d.ts
-├── eslint.config.mjs
-├── next-env.d.ts
-├── next.config.ts
-├── open-next.config.ts
-├── package.json
-├── postcss.config.mjs
-├── tsconfig.json
-├── webflow.json
-└── wrangler.json
+│   ├── app/
+│   │   ├── api/                   # API routes for books, progress, bookmarks, settings
+│   │   ├── read/[bookId]/         # PDF Reader page
+│   │   ├── layout.tsx             # Root layout
+│   │   └── page.tsx               # Home Library page
+│   ├── components/
+│   │   ├── BookCard.tsx           # Book card & Continue Reading hero
+│   │   ├── BookCover.tsx          # PDF first-page thumbnail renderer
+│   │   └── reader/
+│   │       ├── PdfViewer.tsx      # Canvas PDF renderer with lazy rendering
+│   │       ├── ReaderControls.tsx # Auto-hiding top & bottom toolbar
+│   │       ├── BookmarksDrawer.tsx# Bookmarks drawer
+│   │       └── SettingsDrawer.tsx # Reader settings panel
+│   └── lib/
+│       ├── config.ts              # Subpath & URL helper
+│       ├── db.ts                  # D1 & local database layer
+│       └── generated-books.json   # Generated book manifest
+├── next.config.ts                 # Next.config with basePath: "/reader"
+├── wrangler.json                  # Cloudflare Wrangler & D1 binding configuration
+├── webflow.json                   # Webflow Cloud configuration
+└── package.json
 ```
 
-## Set up Webflow CLI
+---
 
-Install Webflow CLI (global install is optional; you can also run the CLI without `npx` in the export step below).
+## 🚀 Quick Start
 
-```bash
-npm install -g @webflow/webflow-cli
-```
-
-Log in to Webflow and select your desired workspace from the opened browser window. You can append `--force` to reset any existing authentication.
-
-```bash
-npx webflow auth login
-```
-
-Then, install the needed dependencies.
+### 1. Install Dependencies
 
 ```bash
 npm install
 ```
 
-Sync all the Webflow components into your local filesystem. Answer the prompts to generate and configure your `webflow.json`.
+### 2. Add PDF Books
 
-```bash
-npx webflow devlink export
+Add your `.pdf` files into `public/books/`:
+
+```text
+public/books/
+├── atomic-habits.pdf
+├── deep-work.pdf
+└── the-psychology-of-money.pdf
 ```
 
-Select your desired Webflow site from the sites listed.
+### 3. Run Development Server
 
-You can also view <a href="https://developers.webflow.com/devlink/reference/overview" target="_blank" rel="noopener noreferrer">our DevLink documentation</a> to learn more about all the options, features, and supported elements.
+```bash
+npm run dev
+```
 
-The `webflow.json` `devlink-export` block tells the Webflow CLI where to write generated React components from your linked Webflow site. After running `webflow cloud init` (or `webflow auth login` + `webflow devlink export`) the CLI populates `./src/webflow/` with components you can import directly into your Vite app.
+Open [http://localhost:3000/reader](http://localhost:3000/reader) in your browser.
 
-## Commands
+---
 
-| Command              | Action                                                                                |
-| -------------------- | ------------------------------------------------------------------------------------- |
-| `npm install`        | Install dependencies                                                                  |
-| `npm run dev`        | Start the Next.js dev server (default [http://localhost:3000](http://localhost:3000)) |
-| `npm run build`      | Create a production build                                                             |
-| `npm run start`      | Run the production server (after `npm run build`)                                     |
-| `npm run lint`       | Run ESLint                                                                            |
-| `npm run deploy`     | Deploy to Webflow Cloud (`webflow cloud deploy`)                                      |
-| `npm run preview`    | Build with OpenNext and run a local Cloudflare preview                                |
-| `npm run cf-typegen` | Regenerate Wrangler types into `cloudflare-env.d.ts`                                  |
+## ⌨️ Reader Keyboard Shortcuts
 
-## Learn more
+| Shortcut | Action |
+| --- | --- |
+| `←` / `A` | Previous page |
+| `→` / `D` / `Space` | Next page |
+| `Shift + Space` | Previous page |
+| `B` | Toggle bookmark on current page |
+| `+` / `=` | Zoom in |
+| `-` / `_` | Zoom out |
+| `F` | Toggle Fullscreen |
+| `Esc` | Exit fullscreen / close settings drawers |
 
-- [Next.js documentation](https://nextjs.org/docs)
-- [Webflow Cloud](https://webflow.com/cloud)
+---
+
+## 🛠️ CLI Commands
+
+| Command | Action |
+| --- | --- |
+| `npm run dev` | Start Next.js dev server (http://localhost:3000/reader) |
+| `npm run build` | Create an optimized production build |
+| `npm run start` | Run production server |
+| `npm run generate-books` | Regenerate book manifest from `public/books/` |
+| `npm run deploy` | Deploy to Webflow Cloud (`webflow cloud deploy`) |
+| `npm run preview` | Build with OpenNext and run local Cloudflare preview |
+| `npm run cf-typegen` | Regenerate Wrangler types into `cloudflare-env.d.ts` |
+
+---
+
+## 📜 License
+
+This project is licensed under the [MIT License](LICENSE) © 2026 Rushikesh Shinde.
