@@ -20,3 +20,7 @@ export function getAssetUrl(path: string): string {
   }
   return cleanPath;
 }
+export function getEnvironment(): 'dev' | 'production' {
+  const env = (process.env.ENVIRONMENT || process.env.NEXT_PUBLIC_ENVIRONMENT || process.env.NODE_ENV || 'dev').toLowerCase();
+  return env === 'production' ? 'production' : 'dev';
+}

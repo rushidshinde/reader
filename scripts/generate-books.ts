@@ -16,37 +16,31 @@ export function cleanTitleFromFilename(fileName: string): { title: string; autho
   // Clean common scraper tags
   name = name.replace(/\(z-lib\.org\)/gi, '').trim();
 
-  // Handle (Author, Name) pattern if present e.g. (Tripathi, Amish)
   let author: string | undefined = undefined;
-  const authorMatch = name.match(/\(([A-Z][a-z]+(?:\s*,\s*[A-Z][a-z]+)?)\)/);
-  if (authorMatch) {
-    const rawAuthor = authorMatch[1];
-    if (rawAuthor.includes(',')) {
-      const parts = rawAuthor.split(',').map(s => s.trim());
-      author = `${parts[1]} ${parts[0]}`;
-    } else {
-      author = rawAuthor;
-    }
-    // Remove author tag from title
-    name = name.replace(authorMatch[0], '').trim();
+
+  // Handle [Author Name] pattern in square brackets
+  const bracketMatch = name.match(/\[(.*?)\]/);
+  if (bracketMatch) {
+    author = bracketMatch[1].trim();
+    name = name.replace(bracketMatch[0], '').trim();
   }
 
-  // Convert underscores/hyphens to spaces if title looks slugified
-  if (!name.includes(' ') && (name.includes('-') || name.includes('_'))) {
-    name = name.replace(/[-_]+/g, ' ');
+  // Fallback to (Author, Name) pattern if present e.g. (Tripathi, Amish)
+  if (!author) {
+    const authorMatch = name.match(/\(([A-Z][a-z]+(?:\s*,\s*[A-Z][a-z]+)?)\)/);
+    if (authorMatch) {
+      const rawAuthor = authorMatch[1];
+      if (rawAuthor.includes(',')) {
+        const parts = rawAuthor.split(',').map(s => s.trim());
+        author = `${parts[1]} ${parts[0]}`;
+      } else {
+        author = rawAuthor;
+      }
+      name = name.replace(authorMatch[0], '').trim();
+    }
   }
 
-  // Capitalize title words intelligently
-  const words = name.split(/\s+/).map(word => {
-    if (word.startsWith('(') && word.endsWith(')')) {
-      // e.g. (Marathi) or (Hindi)
-      const inner = word.slice(1, -1);
-      return `(${inner.charAt(0).toUpperCase() + inner.slice(1)})`;
-    }
-    return word.charAt(0).toUpperCase() + word.slice(1);
-  });
-
-  const title = words.join(' ').replace(/\s+/g, ' ').trim();
+  const title = name.replace(/\s+/g, ' ').trim();
   return { title, author };
 }
 
