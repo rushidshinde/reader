@@ -1,4 +1,3 @@
-import path from 'path';
 import generatedBooks from './generated-books.json';
 
 export interface BookRecord {
@@ -139,62 +138,64 @@ function discoverBooksLive(): { id: string; title: string; author?: string; file
   return generatedBooks as any[];
 }
 
-// Global reference for local SQLite fallback during next dev
-let sqliteDb: any = null;
+// Pure JS file store for local fallback without native C++ compilation dependencies
+interface LocalStoreSchema {
+  books: Record<string, any>;
+  reading_progress: Record<string, ReadingProgress>;
+  bookmarks: Bookmark[];
+  reader_settings: ReaderSettings;
+}
 
-function getLocalSqlite() {
-  if (!sqliteDb) {
-    const Database = require('better-sqlite3');
-    const dbPath = path.join(process.cwd(), '.local-d1.sqlite');
-    sqliteDb = new Database(dbPath);
-    sqliteDb.pragma('journal_mode = WAL');
+let localStoreCache: LocalStoreSchema | null = null;
 
-    sqliteDb.exec(`
-      CREATE TABLE IF NOT EXISTS books (
-        id TEXT PRIMARY KEY,
-        file_name TEXT NOT NULL,
-        file_path TEXT NOT NULL UNIQUE,
-        title TEXT NOT NULL,
-        author TEXT,
-        page_count INTEGER,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
+function getLocalStore(): LocalStoreSchema {
+  if (localStoreCache) return localStoreCache;
 
-      CREATE TABLE IF NOT EXISTS reading_progress (
-        book_id TEXT PRIMARY KEY,
-        current_page INTEGER NOT NULL DEFAULT 1,
-        progress_percentage REAL NOT NULL DEFAULT 0,
-        scroll_position REAL DEFAULT 0,
-        updated_at TEXT NOT NULL,
-        FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
-      );
+  const defaultStore: LocalStoreSchema = {
+    books: {},
+    reading_progress: {},
+    bookmarks: [],
+    reader_settings: {
+      id: 1,
+      theme: 'light',
+      brightness: 1.0,
+      zoom: 1.0,
+      reading_mode: 'continuous',
+      page_width: 'comfortable',
+      show_controls: 1,
+      updated_at: new Date().toISOString()
+    }
+  };
 
-      CREATE TABLE IF NOT EXISTS bookmarks (
-        id TEXT PRIMARY KEY,
-        book_id TEXT NOT NULL,
-        page INTEGER NOT NULL,
-        label TEXT,
-        created_at TEXT NOT NULL,
-        FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
-      );
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const storePath = path.join(process.cwd(), '.local-db.json');
 
-      CREATE TABLE IF NOT EXISTS reader_settings (
-        id INTEGER PRIMARY KEY CHECK (id = 1),
-        theme TEXT NOT NULL DEFAULT 'light',
-        brightness REAL NOT NULL DEFAULT 1,
-        zoom REAL NOT NULL DEFAULT 1,
-        reading_mode TEXT NOT NULL DEFAULT 'continuous',
-        page_width TEXT NOT NULL DEFAULT 'comfortable',
-        show_controls INTEGER NOT NULL DEFAULT 1,
-        updated_at TEXT NOT NULL
-      );
-
-      INSERT OR IGNORE INTO reader_settings (id, theme, brightness, zoom, reading_mode, page_width, show_controls, updated_at)
-      VALUES (1, 'light', 1.0, 1.0, 'continuous', 'comfortable', 1, datetime('now'));
-    `);
+    if (fs.existsSync(/*turbopackIgnore: true*/ storePath)) {
+      const data = fs.readFileSync(/*turbopackIgnore: true*/ storePath, 'utf-8');
+      localStoreCache = JSON.parse(data);
+    } else {
+      localStoreCache = defaultStore;
+      fs.writeFileSync(/*turbopackIgnore: true*/ storePath, JSON.stringify(defaultStore, null, 2), 'utf-8');
+    }
+  } catch (err) {
+    localStoreCache = defaultStore;
   }
-  return sqliteDb;
+
+  return localStoreCache!;
+}
+
+function saveLocalStore(): void {
+  if (!localStoreCache) return;
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const storePath = path.join(process.cwd(), '.local-db.json');
+    fs.writeFileSync(/*turbopackIgnore: true*/ storePath, JSON.stringify(localStoreCache, null, 2), 'utf-8');
+  } catch (err) {
+    // Ignore in read-only / edge environments
+  }
 }
 
 // Automatically create D1 tables if they don't exist yet
@@ -301,20 +302,28 @@ export async function syncBooksManifest(): Promise<void> {
       await d1.batch(statements);
     }
   } else {
-    const db = getLocalSqlite();
-    const stmt = db.prepare(`
-      INSERT INTO books (id, file_name, file_path, title, author, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        file_name = excluded.file_name,
-        file_path = excluded.file_path,
-        title = excluded.title,
-        author = excluded.author;
-    `);
-
+    const store = getLocalStore();
     for (const book of booksToSync) {
-      stmt.run(book.id, book.fileName, book.filePath, book.title, book.author || null, now, now);
+      if (!store.books[book.id]) {
+        store.books[book.id] = {
+          id: book.id,
+          file_name: book.fileName,
+          file_path: book.filePath,
+          title: book.title,
+          author: book.author || null,
+          page_count: null,
+          created_at: now,
+          updated_at: now
+        };
+      } else {
+        store.books[book.id].file_name = book.fileName;
+        store.books[book.id].file_path = book.filePath;
+        store.books[book.id].title = book.title;
+        store.books[book.id].author = book.author || null;
+        store.books[book.id].updated_at = now;
+      }
     }
+    saveLocalStore();
   }
 }
 
@@ -326,39 +335,60 @@ export async function getAllBooks(): Promise<BookRecord[]> {
 
   const manifestMap = new Map(booksToSync.map(b => [b.id, b.url]));
 
-  const query = `
-    SELECT 
-      b.id, b.file_name, b.file_path, b.title, b.author, b.page_count, b.created_at, b.updated_at,
-      p.current_page, p.progress_percentage, p.scroll_position, p.updated_at as last_opened_at
-    FROM books b
-    LEFT JOIN reading_progress p ON b.id = p.book_id
-    ORDER BY p.updated_at DESC, b.title ASC
-  `;
-
-  let rows: any[] = [];
   if (d1) {
+    const query = `
+      SELECT 
+        b.id, b.file_name, b.file_path, b.title, b.author, b.page_count, b.created_at, b.updated_at,
+        p.current_page, p.progress_percentage, p.scroll_position, p.updated_at as last_opened_at
+      FROM books b
+      LEFT JOIN reading_progress p ON b.id = p.book_id
+      ORDER BY p.updated_at DESC, b.title ASC
+    `;
     const res = await d1.prepare(query).all();
-    rows = res.results || [];
-  } else {
-    const db = getLocalSqlite();
-    rows = db.prepare(query).all();
+    const rows = res.results || [];
+    return rows.map((row: any) => ({
+      id: row.id,
+      file_name: row.file_name,
+      file_path: row.file_path,
+      title: row.title,
+      author: row.author,
+      page_count: row.page_count,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      url: manifestMap.get(row.id) || `/books/${encodeURIComponent(row.file_name)}`,
+      current_page: row.current_page || 1,
+      progress_percentage: row.progress_percentage || 0,
+      scroll_position: row.scroll_position || 0,
+      last_opened_at: row.last_opened_at || null
+    }));
   }
 
-  return rows.map(row => ({
-    id: row.id,
-    file_name: row.file_name,
-    file_path: row.file_path,
-    title: row.title,
-    author: row.author,
-    page_count: row.page_count,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-    url: manifestMap.get(row.id) || `/books/${encodeURIComponent(row.file_name)}`,
-    current_page: row.current_page || 1,
-    progress_percentage: row.progress_percentage || 0,
-    scroll_position: row.scroll_position || 0,
-    last_opened_at: row.last_opened_at || null
-  }));
+  const store = getLocalStore();
+  const booksList = Object.values(store.books);
+
+  return booksList.map((b: any) => {
+    const p = store.reading_progress[b.id];
+    return {
+      id: b.id,
+      file_name: b.file_name,
+      file_path: b.file_path,
+      title: b.title,
+      author: b.author,
+      page_count: b.page_count,
+      created_at: b.created_at,
+      updated_at: b.updated_at,
+      url: manifestMap.get(b.id) || `/books/${encodeURIComponent(b.file_name)}`,
+      current_page: p ? p.current_page : 1,
+      progress_percentage: p ? p.progress_percentage : 0,
+      scroll_position: p ? p.scroll_position : 0,
+      last_opened_at: p ? p.updated_at : null
+    };
+  }).sort((a, b) => {
+    const timeA = a.last_opened_at ? new Date(a.last_opened_at).getTime() : 0;
+    const timeB = b.last_opened_at ? new Date(b.last_opened_at).getTime() : 0;
+    if (timeA !== timeB) return timeB - timeA;
+    return a.title.localeCompare(b.title);
+  });
 }
 
 // Get Single Book By ID
@@ -370,37 +400,51 @@ export async function getBookById(id: string): Promise<BookRecord | null> {
   const manifestBook = booksToSync.find(b => b.id === id);
   if (!manifestBook) return null;
 
-  const query = `
-    SELECT 
-      b.id, b.file_name, b.file_path, b.title, b.author, b.page_count, b.created_at, b.updated_at,
-      p.current_page, p.progress_percentage, p.scroll_position, p.updated_at as last_opened_at
-    FROM books b
-    LEFT JOIN reading_progress p ON b.id = p.book_id
-    WHERE b.id = ?
-  `;
-
-  let row: any = null;
   if (d1) {
-    row = await d1.prepare(query).bind(id).first();
-  } else {
-    const db = getLocalSqlite();
-    row = db.prepare(query).get(id);
+    const query = `
+      SELECT 
+        b.id, b.file_name, b.file_path, b.title, b.author, b.page_count, b.created_at, b.updated_at,
+        p.current_page, p.progress_percentage, p.scroll_position, p.updated_at as last_opened_at
+      FROM books b
+      LEFT JOIN reading_progress p ON b.id = p.book_id
+      WHERE b.id = ?
+    `;
+    const row: any = await d1.prepare(query).bind(id).first();
+    return {
+      id: manifestBook.id,
+      file_name: manifestBook.fileName,
+      file_path: manifestBook.filePath,
+      title: manifestBook.title,
+      author: manifestBook.author || (row ? row.author : null),
+      page_count: row ? row.page_count : null,
+      created_at: row ? row.created_at : new Date().toISOString(),
+      updated_at: row ? row.updated_at : new Date().toISOString(),
+      url: manifestBook.url,
+      current_page: row?.current_page || 1,
+      progress_percentage: row?.progress_percentage || 0,
+      scroll_position: row?.scroll_position || 0,
+      last_opened_at: row?.last_opened_at || null
+    };
   }
+
+  const store = getLocalStore();
+  const b = store.books[id];
+  const p = store.reading_progress[id];
 
   return {
     id: manifestBook.id,
     file_name: manifestBook.fileName,
     file_path: manifestBook.filePath,
     title: manifestBook.title,
-    author: manifestBook.author || (row ? row.author : null),
-    page_count: row ? row.page_count : null,
-    created_at: row ? row.created_at : new Date().toISOString(),
-    updated_at: row ? row.updated_at : new Date().toISOString(),
+    author: manifestBook.author || (b ? b.author : null),
+    page_count: b ? b.page_count : null,
+    created_at: b ? b.created_at : new Date().toISOString(),
+    updated_at: b ? b.updated_at : new Date().toISOString(),
     url: manifestBook.url,
-    current_page: row?.current_page || 1,
-    progress_percentage: row?.progress_percentage || 0,
-    scroll_position: row?.scroll_position || 0,
-    last_opened_at: row?.last_opened_at || null
+    current_page: p ? p.current_page : 1,
+    progress_percentage: p ? p.progress_percentage : 0,
+    scroll_position: p ? p.scroll_position : 0,
+    last_opened_at: p ? p.updated_at : null
   };
 }
 
@@ -431,35 +475,33 @@ export async function saveReadingProgress(
         .bind(pageCount, now, bookId).run();
     }
   } else {
-    const db = getLocalSqlite();
-    db.prepare(`
-      INSERT INTO reading_progress (book_id, current_page, progress_percentage, scroll_position, updated_at)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(book_id) DO UPDATE SET
-        current_page = excluded.current_page,
-        progress_percentage = excluded.progress_percentage,
-        scroll_position = excluded.scroll_position,
-        updated_at = excluded.updated_at;
-    `).run(bookId, currentPage, progressPercentage, scrollPosition, now);
-
-    if (pageCount && pageCount > 0) {
-      db.prepare(`UPDATE books SET page_count = ?, updated_at = ? WHERE id = ?`).run(pageCount, now, bookId);
+    const store = getLocalStore();
+    store.reading_progress[bookId] = {
+      book_id: bookId,
+      current_page: currentPage,
+      progress_percentage: progressPercentage,
+      scroll_position: scrollPosition,
+      updated_at: now
+    };
+    if (pageCount && store.books[bookId]) {
+      store.books[bookId].page_count = pageCount;
     }
+    saveLocalStore();
   }
 }
 
 // Bookmarks
 export async function getBookmarks(bookId: string): Promise<Bookmark[]> {
   const d1 = await getD1();
-  const query = `SELECT id, book_id, page, label, created_at FROM bookmarks WHERE book_id = ? ORDER BY page ASC`;
 
   if (d1) {
+    const query = `SELECT id, book_id, page, label, created_at FROM bookmarks WHERE book_id = ? ORDER BY page ASC`;
     const res = await d1.prepare(query).bind(bookId).all();
     return (res.results || []) as unknown as Bookmark[];
-  } else {
-    const db = getLocalSqlite();
-    return (db.prepare(query).all(bookId) || []) as unknown as Bookmark[];
   }
+
+  const store = getLocalStore();
+  return store.bookmarks.filter(b => b.book_id === bookId).sort((a, b) => a.page - b.page);
 }
 
 export async function addBookmark(bookId: string, page: number, label?: string): Promise<Bookmark> {
@@ -467,6 +509,7 @@ export async function addBookmark(bookId: string, page: number, label?: string):
   const id = `bm_${bookId}_${page}_${Date.now()}`;
   const now = new Date().toISOString();
   const bookmarkLabel = label || `Page ${page}`;
+  const newBm: Bookmark = { id, book_id: bookId, page, label: bookmarkLabel, created_at: now };
 
   if (d1) {
     await d1.prepare(`
@@ -475,15 +518,14 @@ export async function addBookmark(bookId: string, page: number, label?: string):
       ON CONFLICT(id) DO NOTHING;
     `).bind(id, bookId, page, bookmarkLabel, now).run();
   } else {
-    const db = getLocalSqlite();
-    db.prepare(`
-      INSERT INTO bookmarks (id, book_id, page, label, created_at)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO NOTHING;
-    `).run(id, bookId, page, bookmarkLabel, now);
+    const store = getLocalStore();
+    if (!store.bookmarks.some(b => b.book_id === bookId && b.page === page)) {
+      store.bookmarks.push(newBm);
+      saveLocalStore();
+    }
   }
 
-  return { id, book_id: bookId, page, label: bookmarkLabel, created_at: now };
+  return newBm;
 }
 
 export async function deleteBookmark(bookmarkId: string): Promise<void> {
@@ -491,34 +533,33 @@ export async function deleteBookmark(bookmarkId: string): Promise<void> {
   if (d1) {
     await d1.prepare(`DELETE FROM bookmarks WHERE id = ?`).bind(bookmarkId).run();
   } else {
-    const db = getLocalSqlite();
-    db.prepare(`DELETE FROM bookmarks WHERE id = ?`).run(bookmarkId);
+    const store = getLocalStore();
+    store.bookmarks = store.bookmarks.filter(b => b.id !== bookmarkId);
+    saveLocalStore();
   }
 }
 
 // Reader Settings
 export async function getReaderSettings(): Promise<ReaderSettings> {
   const d1 = await getD1();
-  const query = `SELECT id, theme, brightness, zoom, reading_mode, page_width, show_controls, updated_at FROM reader_settings WHERE id = 1`;
 
-  let row: any = null;
   if (d1) {
-    row = await d1.prepare(query).first();
-  } else {
-    const db = getLocalSqlite();
-    row = db.prepare(query).get();
+    const query = `SELECT id, theme, brightness, zoom, reading_mode, page_width, show_controls, updated_at FROM reader_settings WHERE id = 1`;
+    const row: any = await d1.prepare(query).first();
+    return {
+      id: 1,
+      theme: row?.theme || 'light',
+      brightness: row?.brightness ?? 1.0,
+      zoom: row?.zoom ?? 1.0,
+      reading_mode: row?.reading_mode || 'continuous',
+      page_width: row?.page_width || 'comfortable',
+      show_controls: row?.show_controls ?? 1,
+      updated_at: row?.updated_at || new Date().toISOString()
+    };
   }
 
-  return {
-    id: 1,
-    theme: row?.theme || 'light',
-    brightness: row?.brightness ?? 1.0,
-    zoom: row?.zoom ?? 1.0,
-    reading_mode: row?.reading_mode || 'continuous',
-    page_width: row?.page_width || 'comfortable',
-    show_controls: row?.show_controls ?? 1,
-    updated_at: row?.updated_at || new Date().toISOString()
-  };
+  const store = getLocalStore();
+  return store.reader_settings;
 }
 
 export async function saveReaderSettings(settings: Partial<ReaderSettings>): Promise<ReaderSettings> {
@@ -531,20 +572,19 @@ export async function saveReaderSettings(settings: Partial<ReaderSettings>): Pro
     updated_at: new Date().toISOString()
   };
 
-  const query = `
-    INSERT INTO reader_settings (id, theme, brightness, zoom, reading_mode, page_width, show_controls, updated_at)
-    VALUES (1, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      theme = excluded.theme,
-      brightness = excluded.brightness,
-      zoom = excluded.zoom,
-      reading_mode = excluded.reading_mode,
-      page_width = excluded.page_width,
-      show_controls = excluded.show_controls,
-      updated_at = excluded.updated_at;
-  `;
-
   if (d1) {
+    const query = `
+      INSERT INTO reader_settings (id, theme, brightness, zoom, reading_mode, page_width, show_controls, updated_at)
+      VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        theme = excluded.theme,
+        brightness = excluded.brightness,
+        zoom = excluded.zoom,
+        reading_mode = excluded.reading_mode,
+        page_width = excluded.page_width,
+        show_controls = excluded.show_controls,
+        updated_at = excluded.updated_at;
+    `;
     await d1.prepare(query).bind(
       updated.theme,
       updated.brightness,
@@ -555,16 +595,9 @@ export async function saveReaderSettings(settings: Partial<ReaderSettings>): Pro
       updated.updated_at
     ).run();
   } else {
-    const db = getLocalSqlite();
-    db.prepare(query).run(
-      updated.theme,
-      updated.brightness,
-      updated.zoom,
-      updated.reading_mode,
-      updated.page_width,
-      updated.show_controls ? 1 : 0,
-      updated.updated_at
-    );
+    const store = getLocalStore();
+    store.reader_settings = updated;
+    saveLocalStore();
   }
 
   return updated;

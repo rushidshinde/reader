@@ -1,6 +1,12 @@
 {
   "cloud": {
-    "framework": "nextjs"
+    "framework": "nextjs",
+    "app_id": "d557fd07-81ab-486c-b965-871c61ca0a93",
+    "contract_version": "1",
+    "deployment_type": "ssr",
+    "entrypoint_path": "./worker.js",
+    "skip_no_bundle": false,
+    "framework_version": "16.3.1"
   },
   "devlink-export": {
     "rootDir": "./src/webflow",
@@ -10,5 +16,12 @@
     "cssScopes": true,
     "relativeHrefRoot": "/"
   },
-  "siteId": "6669402e5b66566a333addc1"
+  "siteId": "6669402e5b66566a333addc1",
+  "telemetry": {
+    "global": {
+      "allowTelemetry": true,
+      "lastPrompted": 1787034336867,
+      "version": "2.4.0"
+    }
+  }
 }
