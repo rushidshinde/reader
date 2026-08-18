@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
   ArrowLeft,
@@ -49,6 +49,9 @@ export const ReaderControls: React.FC<ReaderControlsProps> = ({
   visible
 }) => {
   const [inputPage, setInputPage] = useState<string>(currentPage.toString());
+  const [isScrubbing, setIsScrubbing] = useState<boolean>(false);
+  const [hoverPage, setHoverPage] = useState<{ page: number; percentage: number; x: number } | null>(null);
+  const progressBarRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setInputPage(currentPage.toString());
@@ -57,18 +60,95 @@ export const ReaderControls: React.FC<ReaderControlsProps> = ({
   const handlePageSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const p = parseInt(inputPage, 10);
-    if (!isNaN(p) && p >= 1 && p <= totalPages) {
+    if (!isNaN(p) && p >= 1 && p <= (totalPages || 1)) {
       onPageChange(p);
     } else {
       setInputPage(currentPage.toString());
     }
   };
 
+  // Top Progress Bar Scrubbing Calculations
+  const calculateScrubPage = (clientX: number): { targetPage: number; percentage: number; relativeX: number } | null => {
+    if (!progressBarRef.current || !totalPages) return null;
+    const rect = progressBarRef.current.getBoundingClientRect();
+    const relativeX = Math.max(0, Math.min(rect.width, clientX - rect.left));
+    const ratio = relativeX / rect.width;
+    const targetPage = Math.max(1, Math.min(totalPages, Math.round(ratio * totalPages)));
+    const percentage = Math.round((targetPage / totalPages) * 100);
+    return { targetPage, percentage, relativeX };
+  };
+
+  const handleProgressBarClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const scrub = calculateScrubPage(e.clientX);
+    if (scrub) {
+      onPageChange(scrub.targetPage);
+    }
+  };
+
+  const handleProgressBarMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const scrub = calculateScrubPage(e.clientX);
+    if (scrub) {
+      setHoverPage({ page: scrub.targetPage, percentage: scrub.percentage, x: scrub.relativeX });
+      if (isScrubbing) {
+        onPageChange(scrub.targetPage);
+      }
+    }
+  };
+
+  const handleProgressBarMouseLeave = () => {
+    setHoverPage(null);
+    setIsScrubbing(false);
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    setIsScrubbing(true);
+    const scrub = calculateScrubPage(e.clientX);
+    if (scrub) {
+      onPageChange(scrub.targetPage);
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsScrubbing(false);
+  };
+
+  const progressPercentage = totalPages > 0 ? Math.min(100, Math.round((currentPage / totalPages) * 100)) : 0;
+
   return (
     <>
+      {/* Top Scrubbable Interactive Reading Progress Bar */}
+      <div
+        ref={progressBarRef}
+        onClick={handleProgressBarClick}
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
+        onMouseMove={handleProgressBarMouseMove}
+        onMouseLeave={handleProgressBarMouseLeave}
+        className="fixed top-0 left-0 right-0 z-50 h-2 bg-stone-300/40 dark:bg-stone-800/60 cursor-pointer group transition-all duration-150 select-none hover:h-3"
+        title="Click or drag to scrub pages"
+      >
+        {/* Filled Progress Bar */}
+        <div
+          className="h-full bg-blue-600 dark:bg-blue-500 transition-all duration-150 ease-out relative"
+          style={{ width: `${progressPercentage}%` }}
+        >
+          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-blue-600 dark:bg-blue-400 rounded-full shadow-md opacity-0 group-hover:opacity-100 transition-opacity" />
+        </div>
+
+        {/* Hover / Drag Page Tooltip */}
+        {hoverPage && (
+          <div
+            className="absolute top-4 -translate-x-1/2 px-2.5 py-1 bg-stone-900/95 text-white dark:bg-stone-800/95 rounded-md text-[11px] font-mono font-semibold shadow-xl border border-stone-700/80 pointer-events-none z-50 whitespace-nowrap"
+            style={{ left: `${hoverPage.x}px` }}
+          >
+            Page {hoverPage.page} of {totalPages} ({hoverPage.percentage}%)
+          </div>
+        )}
+      </div>
+
       {/* Top Header Bar */}
       <header
-        className={`fixed top-0 left-0 right-0 z-40 px-4 py-3 bg-white/80 dark:bg-stone-900/80 backdrop-blur-md border-b border-stone-200/60 dark:border-stone-800/60 transition-transform duration-300 ${
+        className={`fixed top-2 left-0 right-0 z-40 px-4 py-3 bg-white/80 dark:bg-stone-900/80 backdrop-blur-md border-b border-stone-200/60 dark:border-stone-800/60 transition-transform duration-300 ${
           visible ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0 pointer-events-none'
         }`}
       >
@@ -163,7 +243,12 @@ export const ReaderControls: React.FC<ReaderControlsProps> = ({
               value={inputPage}
               onChange={e => setInputPage(e.target.value)}
               onBlur={handlePageSubmit}
-              className="w-10 py-1 text-center bg-stone-800 text-white rounded-md border border-stone-700 font-mono font-bold focus:outline-none focus:border-blue-500 text-xs"
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  handlePageSubmit(e);
+                }
+              }}
+              className="w-12 py-1 text-center bg-stone-800 text-white rounded-md border border-stone-700 font-mono font-bold focus:outline-none focus:border-blue-500 text-xs"
             />
             <span className="text-stone-400">/ {totalPages || 1}</span>
           </form>

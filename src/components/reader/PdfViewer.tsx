@@ -34,8 +34,9 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const pagesRenderedRef = useRef<{ [key: number]: boolean }>({});
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hasInitialScrolledRef = useRef<boolean>(false);
+  const singleCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Initialize PDF.js and Load Document
   useEffect(() => {
@@ -45,6 +46,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
       try {
         setLoading(true);
         setError(null);
+        hasInitialScrolledRef.current = false;
 
         const pdfjs = await import('pdfjs-dist');
         pdfjs.GlobalWorkerOptions.workerSrc = getAssetUrl('/pdf.worker.min.mjs');
@@ -78,14 +80,38 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     };
   }, [url]);
 
-  // Handle external jump target page
+  // Execute initial scroll to initialPage once document is ready
+  useEffect(() => {
+    if (!loading && pdfDoc && numPages > 0 && !hasInitialScrolledRef.current) {
+      const startPage = Math.min(numPages, Math.max(1, initialPage || 1));
+      if (settings.reading_mode === 'continuous' && containerRef.current) {
+        setTimeout(() => {
+          const pageEl = containerRef.current?.querySelector(`[data-page-num="${startPage}"]`);
+          if (pageEl) {
+            pageEl.scrollIntoView({ behavior: 'auto', block: 'start' });
+          }
+          hasInitialScrolledRef.current = true;
+        }, 100);
+      } else {
+        hasInitialScrolledRef.current = true;
+      }
+    }
+  }, [loading, pdfDoc, numPages, initialPage, settings.reading_mode]);
+
+  // Handle external jump target page (Enter input, arrows, progress bar scrub)
   useEffect(() => {
     if (targetPage && targetPage >= 1 && targetPage <= numPages) {
       setCurrentPage(targetPage);
+      if (settings.reading_mode === 'continuous' && containerRef.current) {
+        const pageEl = containerRef.current.querySelector(`[data-page-num="${targetPage}"]`);
+        if (pageEl) {
+          pageEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
     }
-  }, [targetPage, numPages]);
+  }, [targetPage, numPages, settings.reading_mode]);
 
-  // Save Progress Function (Debounced & Immediate)
+  // Save Progress Function (Debounced)
   const saveProgress = useCallback((pageToSave: number, total: number) => {
     if (!bookId || !total) return;
     const progress = Math.min(100, Math.round((pageToSave / total) * 100 * 10) / 10);
@@ -109,9 +135,9 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     }, 1000);
   }, [bookId]);
 
-  // Immediately save on page change
+  // Auto-save progress ONLY after initial scroll completed
   useEffect(() => {
-    if (numPages > 0) {
+    if (numPages > 0 && hasInitialScrolledRef.current) {
       onPageChange(currentPage, numPages);
       saveProgress(currentPage, numPages);
     }
@@ -120,7 +146,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   // Save on tab hide / unmount
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden' && numPages > 0) {
+      if (document.visibilityState === 'hidden' && numPages > 0 && hasInitialScrolledRef.current) {
         const progress = Math.min(100, Math.round((currentPage / numPages) * 100 * 10) / 10);
         navigator.sendBeacon(getApiUrl('/api/progress'), JSON.stringify({
           bookId,
@@ -166,8 +192,6 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   }, [pdfDoc, settings.zoom]);
 
   // Render Canvas when Paged Mode or Current Page Changes
-  const singleCanvasRef = useRef<HTMLCanvasElement | null>(null);
-
   useEffect(() => {
     if (pdfDoc && settings.reading_mode === 'paged' && singleCanvasRef.current) {
       renderSinglePage(currentPage, singleCanvasRef.current);
@@ -194,6 +218,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
 
     const observer = new IntersectionObserver(
       entries => {
+        if (!hasInitialScrolledRef.current) return;
         entries.forEach(entry => {
           if (entry.isIntersecting) {
             const pNum = parseInt(entry.target.getAttribute('data-page-num') || '0', 10);
@@ -210,17 +235,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     pageEls.forEach(el => observer.observe(el));
 
     return () => observer.disconnect();
-  }, [settings.reading_mode, numPages]);
-
-  // Scroll to current page when page or mode changes
-  useEffect(() => {
-    if (settings.reading_mode === 'continuous' && containerRef.current) {
-      const pageEl = containerRef.current.querySelector(`[data-page-num="${currentPage}"]`);
-      if (pageEl) {
-        pageEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-    }
-  }, [targetPage]);
+  }, [settings.reading_mode, numPages, currentPage]);
 
   // Theme & Width helper styles
   const widthClasses = {
