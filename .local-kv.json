@@ -1,0 +1,143 @@
+{
+  "books_manifest": [
+    {
+      "id": "a-secret-revealed-hindi-christopher-c-doyle",
+      "file_name": "A Secret Revealed (Hindi) [Christopher C. Doyle].pdf",
+      "file_path": "/public/books/A Secret Revealed (Hindi) [Christopher C. Doyle].pdf",
+      "title": "A Secret Revealed (Hindi)",
+      "author": "Christopher C. Doyle",
+      "page_count": null,
+      "created_at": "2026-08-18T17:24:14.340Z",
+      "updated_at": "2026-08-18T17:24:14.340Z",
+      "url": "/books/A%20Secret%20Revealed%20(Hindi)%20%5BChristopher%20C.%20Doyle%5D.pdf"
+    },
+    {
+      "id": "raavan-aryavart-ka-shatru-hindi-amish-tripathi",
+      "file_name": "Raavan - Aryavart Ka Shatru (Hindi) [Amish Tripathi].pdf",
+      "file_path": "/public/books/Raavan - Aryavart Ka Shatru (Hindi) [Amish Tripathi].pdf",
+      "title": "Raavan - Aryavart Ka Shatru (Hindi)",
+      "author": "Amish Tripathi",
+      "page_count": null,
+      "created_at": "2026-08-18T17:24:14.340Z",
+      "updated_at": "2026-08-18T17:24:14.340Z",
+      "url": "/books/Raavan%20-%20Aryavart%20Ka%20Shatru%20(Hindi)%20%5BAmish%20Tripathi%5D.pdf"
+    },
+    {
+      "id": "scion-of-ikshvaku-marathi-amish-tripathi",
+      "file_name": "Scion of Ikshvaku (Marathi) [Amish Tripathi].pdf",
+      "file_path": "/public/books/Scion of Ikshvaku (Marathi) [Amish Tripathi].pdf",
+      "title": "Scion of Ikshvaku (Marathi)",
+      "author": "Amish Tripathi",
+      "page_count": null,
+      "created_at": "2026-08-18T17:24:14.340Z",
+      "updated_at": "2026-08-18T17:24:14.340Z",
+      "url": "/books/Scion%20of%20Ikshvaku%20(Marathi)%20%5BAmish%20Tripathi%5D.pdf"
+    },
+    {
+      "id": "sita-warrior-of-mithila-marathi-amish-tripathi",
+      "file_name": "Sita - Warrior of Mithila (Marathi) [Amish Tripathi].pdf",
+      "file_path": "/public/books/Sita - Warrior of Mithila (Marathi) [Amish Tripathi].pdf",
+      "title": "Sita - Warrior of Mithila (Marathi)",
+      "author": "Amish Tripathi",
+      "page_count": null,
+      "created_at": "2026-08-18T17:24:14.340Z",
+      "updated_at": "2026-08-18T17:24:14.340Z",
+      "url": "/books/Sita%20-%20Warrior%20of%20Mithila%20(Marathi)%20%5BAmish%20Tripathi%5D.pdf"
+    },
+    {
+      "id": "the-alchemist-marathi-paulo-coelho",
+      "file_name": "The Alchemist (Marathi) [Paulo Coelho].pdf",
+      "file_path": "/public/books/The Alchemist (Marathi) [Paulo Coelho].pdf",
+      "title": "The Alchemist (Marathi)",
+      "author": "Paulo Coelho",
+      "page_count": null,
+      "created_at": "2026-08-18T17:24:14.340Z",
+      "updated_at": "2026-08-18T17:24:14.340Z",
+      "url": "/books/The%20Alchemist%20(Marathi)%20%5BPaulo%20Coelho%5D.pdf"
+    },
+    {
+      "id": "the-immortals-of-meluha-marathi-amish-tripathi",
+      "file_name": "The Immortals of Meluha (Marathi) [Amish Tripathi].pdf",
+      "file_path": "/public/books/The Immortals of Meluha (Marathi) [Amish Tripathi].pdf",
+      "title": "The Immortals of Meluha (Marathi)",
+      "author": "Amish Tripathi",
+      "page_count": 344,
+      "created_at": "2026-08-18T17:24:14.340Z",
+      "updated_at": "2026-08-18T17:27:19.405Z",
+      "url": "/books/The%20Immortals%20of%20Meluha%20(Marathi)%20%5BAmish%20Tripathi%5D.pdf"
+    },
+    {
+      "id": "the-mahabharata-quest-the-alexander-secret-english-christopher-c-doyle",
+      "file_name": "The Mahabharata Quest - The Alexander Secret (English) [Christopher C. Doyle].pdf",
+      "file_path": "/public/books/The Mahabharata Quest - The Alexander Secret (English) [Christopher C. Doyle].pdf",
+      "title": "The Mahabharata Quest - The Alexander Secret (English)",
+      "author": "Christopher C. Doyle",
+      "page_count": null,
+      "created_at": "2026-08-18T17:24:14.340Z",
+      "updated_at": "2026-08-18T17:24:14.340Z",
+      "url": "/books/The%20Mahabharata%20Quest%20-%20The%20Alexander%20Secret%20(English)%20%5BChristopher%20C.%20Doyle%5D.pdf"
+    },
+    {
+      "id": "the-mahabharata-quest-the-secret-of-the-druids-english-christopher-c-doyle",
+      "file_name": "The Mahabharata Quest - The Secret of the Druids (English) [Christopher C. Doyle].pdf",
+      "file_path": "/public/books/The Mahabharata Quest - The Secret of the Druids (English) [Christopher C. Doyle].pdf",
+      "title": "The Mahabharata Quest - The Secret of the Druids (English)",
+      "author": "Christopher C. Doyle",
+      "page_count": null,
+      "created_at": "2026-08-18T17:24:14.340Z",
+      "updated_at": "2026-08-18T17:24:14.340Z",
+      "url": "/books/The%20Mahabharata%20Quest%20-%20The%20Secret%20of%20the%20Druids%20(English)%20%5BChristopher%20C.%20Doyle%5D.pdf"
+    },
+    {
+      "id": "the-mahabharata-secret-hindi-christopher-c-doyle",
+      "file_name": "The Mahabharata Secret (Hindi) [Christopher C. Doyle].pdf",
+      "file_path": "/public/books/The Mahabharata Secret (Hindi) [Christopher C. Doyle].pdf",
+      "title": "The Mahabharata Secret (Hindi)",
+      "author": "Christopher C. Doyle",
+      "page_count": null,
+      "created_at": "2026-08-18T17:24:14.340Z",
+      "updated_at": "2026-08-18T17:24:14.340Z",
+      "url": "/books/The%20Mahabharata%20Secret%20(Hindi)%20%5BChristopher%20C.%20Doyle%5D.pdf"
+    },
+    {
+      "id": "the-oath-of-the-vayuputras-marathi-amish-tripathi",
+      "file_name": "The Oath of the Vayuputras (Marathi) [Amish Tripathi].pdf",
+      "file_path": "/public/books/The Oath of the Vayuputras (Marathi) [Amish Tripathi].pdf",
+      "title": "The Oath of the Vayuputras (Marathi)",
+      "author": "Amish Tripathi",
+      "page_count": null,
+      "created_at": "2026-08-18T17:24:14.340Z",
+      "updated_at": "2026-08-18T17:24:14.340Z",
+      "url": "/books/The%20Oath%20of%20the%20Vayuputras%20(Marathi)%20%5BAmish%20Tripathi%5D.pdf"
+    },
+    {
+      "id": "the-secret-of-the-nagas-marathi-amish-tripathi",
+      "file_name": "The Secret of the Nagas (Marathi) [Amish Tripathi].pdf",
+      "file_path": "/public/books/The Secret of the Nagas (Marathi) [Amish Tripathi].pdf",
+      "title": "The Secret of the Nagas (Marathi)",
+      "author": "Amish Tripathi",
+      "page_count": null,
+      "created_at": "2026-08-18T17:24:14.340Z",
+      "updated_at": "2026-08-18T17:24:14.340Z",
+      "url": "/books/The%20Secret%20of%20the%20Nagas%20(Marathi)%20%5BAmish%20Tripathi%5D.pdf"
+    },
+    {
+      "id": "war-of-lanka-english-amish-tripathi",
+      "file_name": "War of Lanka (English) [Amish Tripathi].pdf",
+      "file_path": "/public/books/War of Lanka (English) [Amish Tripathi].pdf",
+      "title": "War of Lanka (English)",
+      "author": "Amish Tripathi",
+      "page_count": null,
+      "created_at": "2026-08-18T17:24:14.340Z",
+      "updated_at": "2026-08-18T17:24:14.340Z",
+      "url": "/books/War%20of%20Lanka%20(English)%20%5BAmish%20Tripathi%5D.pdf"
+    }
+  ],
+  "progress:the-immortals-of-meluha-marathi-amish-tripathi": {
+    "book_id": "the-immortals-of-meluha-marathi-amish-tripathi",
+    "current_page": 241,
+    "progress_percentage": 70.1,
+    "scroll_position": 0,
+    "updated_at": "2026-08-18T17:27:19.405Z"
+  }
+}

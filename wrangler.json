@@ -8,12 +8,10 @@
     "binding": "ASSETS",
     "directory": ".open-next/assets"
   },
-  "d1_databases": [
+  "kv_namespaces": [
     {
-      "binding": "DB",
-      "database_name": "reader-db",
-      "database_id": "local-reader-db",
-      "migrations_dir": "migrations"
+      "binding": "KV",
+      "id": "local-reader-kv"
     }
   ],
   "observability": {
