@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { ReaderSettings } from '@/lib/db';
-
 import { getApiUrl, getAssetUrl } from '@/lib/config';
+import { getPdfArrayBuffer } from '@/lib/pdfCache';
 
 interface PdfViewerProps {
   url: string;
@@ -17,6 +17,110 @@ interface PdfViewerProps {
   targetPage?: number;
 }
 
+interface SinglePageCanvasProps {
+  pdfDoc: any;
+  pageNum: number;
+  zoom: number;
+  canvasFilterClass: string;
+  numPages: number;
+}
+
+const SinglePageCanvas: React.FC<SinglePageCanvasProps> = ({
+  pdfDoc,
+  pageNum,
+  zoom,
+  canvasFilterClass,
+  numPages,
+}) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const renderTaskRef = useRef<any>(null);
+  const [rendering, setRendering] = useState<boolean>(true);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function render() {
+      if (!pdfDoc || !canvasRef.current) return;
+
+      // Cancel any ongoing render task for this canvas
+      if (renderTaskRef.current) {
+        try {
+          renderTaskRef.current.cancel();
+        } catch {
+          // ignore cancel error
+        }
+        renderTaskRef.current = null;
+      }
+
+      try {
+        setRendering(true);
+        const page = await pdfDoc.getPage(pageNum);
+        if (isCancelled || !canvasRef.current) return;
+
+        // Cap scale to prevent massive canvas GPU memory allocation on high-DPI mobile
+        const dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1;
+        const scale = (zoom || 1.0) * dpr;
+        const viewport = page.getViewport({ scale: scale * 1.2 });
+
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+
+        const renderContext = {
+          canvasContext: ctx,
+          viewport: viewport,
+        };
+
+        const task = page.render(renderContext);
+        renderTaskRef.current = task;
+        await task.promise;
+        if (!isCancelled) setRendering(false);
+      } catch (err: any) {
+        if (err?.name !== 'RenderingCancelledException' && !isCancelled) {
+          console.warn(`Page ${pageNum} render error:`, err);
+          setRendering(false);
+        }
+      }
+    }
+
+    render();
+
+    return () => {
+      isCancelled = true;
+      if (renderTaskRef.current) {
+        try {
+          renderTaskRef.current.cancel();
+        } catch {
+          // ignore
+        }
+        renderTaskRef.current = null;
+      }
+      // Release GPU canvas memory on unmount
+      if (canvasRef.current) {
+        canvasRef.current.width = 0;
+        canvasRef.current.height = 0;
+      }
+    };
+  }, [pdfDoc, pageNum, zoom]);
+
+  return (
+    <div className="relative w-full flex flex-col items-center min-h-75 justify-center">
+      {rendering && (
+        <div className="absolute inset-0 flex items-center justify-center bg-stone-100/50 dark:bg-stone-900/50 backdrop-blur-[1px] z-10 rounded">
+          <Loader2 className="w-6 h-6 animate-spin text-blue-600 opacity-60" />
+        </div>
+      )}
+      <canvas ref={canvasRef} className={`max-w-full h-auto shadow-md ${canvasFilterClass}`} />
+      <div className="py-2 text-[11px] font-mono opacity-40">
+        Page {pageNum} of {numPages}
+      </div>
+    </div>
+  );
+};
+
 export const PdfViewer: React.FC<PdfViewerProps> = ({
   url,
   bookId,
@@ -25,20 +129,25 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   onPageChange,
   onBookmarkToggle,
   onToggleFullscreen,
-  targetPage
+  targetPage,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [pdfDoc, setPdfDoc] = useState<any>(null);
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState<number>(initialPage || 1);
+  const [aspectRatio, setAspectRatio] = useState<number>(0.75); // default width/height aspect ratio
+  const [visiblePageSet, setVisiblePageSet] = useState<Set<number>>(new Set([initialPage || 1]));
+
   const [loading, setLoading] = useState<boolean>(true);
+  const [loadingProgress, setLoadingProgress] = useState<string>('Opening book...');
   const [error, setError] = useState<string | null>(null);
 
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasInitialScrolledRef = useRef<boolean>(false);
   const singleCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const singleRenderTaskRef = useRef<any>(null);
 
-  // Initialize PDF.js and Load Document
+  // Initialize PDF.js and Load Document (with CacheStorage strategy)
   useEffect(() => {
     let isCancelled = false;
 
@@ -46,22 +155,42 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
       try {
         setLoading(true);
         setError(null);
+        setLoadingProgress('Checking cache & loading PDF...');
         hasInitialScrolledRef.current = false;
 
         const pdfjs = await import('pdfjs-dist');
         pdfjs.GlobalWorkerOptions.workerSrc = getAssetUrl('/pdf.worker.min.mjs');
 
         const pdfUrl = getAssetUrl(url);
-        const loadingTask = pdfjs.getDocument({ url: pdfUrl });
+        
+        // Fetch via CacheStorage or network buffer
+        const arrayBuffer = await getPdfArrayBuffer(pdfUrl);
+
+        if (isCancelled) return;
+
+        setLoadingProgress('Parsing document structure...');
+        const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
         const doc = await loadingTask.promise;
 
         if (isCancelled) return;
+
+        // Fetch page 1 for aspect ratio estimation
+        try {
+          const firstPage = await doc.getPage(1);
+          const vp = firstPage.getViewport({ scale: 1.0 });
+          if (vp.width && vp.height) {
+            setAspectRatio(vp.width / vp.height);
+          }
+        } catch {
+          // fallback to 0.75
+        }
 
         setPdfDoc(doc);
         setNumPages(doc.numPages);
 
         const startPage = Math.min(doc.numPages, Math.max(1, initialPage || 1));
         setCurrentPage(startPage);
+        setVisiblePageSet(new Set([startPage, Math.max(1, startPage - 1), Math.min(doc.numPages, startPage + 1)]));
         onPageChange(startPage, doc.numPages);
         setLoading(false);
       } catch (err: any) {
@@ -91,7 +220,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
             pageEl.scrollIntoView({ behavior: 'auto', block: 'start' });
           }
           hasInitialScrolledRef.current = true;
-        }, 100);
+        }, 150);
       } else {
         hasInitialScrolledRef.current = true;
       }
@@ -112,28 +241,31 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   }, [targetPage, numPages, settings.reading_mode]);
 
   // Save Progress Function (Debounced)
-  const saveProgress = useCallback((pageToSave: number, total: number) => {
-    if (!bookId || !total) return;
-    const progress = Math.min(100, Math.round((pageToSave / total) * 100 * 10) / 10);
+  const saveProgress = useCallback(
+    (pageToSave: number, total: number) => {
+      if (!bookId || !total) return;
+      const progress = Math.min(100, Math.round((pageToSave / total) * 100 * 10) / 10);
 
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
 
-    saveTimeoutRef.current = setTimeout(() => {
-      fetch(getApiUrl('/api/progress'), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          bookId,
-          currentPage: pageToSave,
-          progressPercentage: progress,
-          pageCount: total
-        }),
-        keepalive: true
-      }).catch(err => console.warn('Failed to auto-save progress:', err));
-    }, 1000);
-  }, [bookId]);
+      saveTimeoutRef.current = setTimeout(() => {
+        fetch(getApiUrl('/api/progress'), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bookId,
+            currentPage: pageToSave,
+            progressPercentage: progress,
+            pageCount: total,
+          }),
+          keepalive: true,
+        }).catch(err => console.warn('Failed to auto-save progress:', err));
+      }, 1000);
+    },
+    [bookId]
+  );
 
   // Auto-save progress ONLY after initial scroll completed
   useEffect(() => {
@@ -148,12 +280,15 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden' && numPages > 0 && hasInitialScrolledRef.current) {
         const progress = Math.min(100, Math.round((currentPage / numPages) * 100 * 10) / 10);
-        navigator.sendBeacon(getApiUrl('/api/progress'), JSON.stringify({
-          bookId,
-          currentPage,
-          progressPercentage: progress,
-          pageCount: numPages
-        }));
+        navigator.sendBeacon(
+          getApiUrl('/api/progress'),
+          JSON.stringify({
+            bookId,
+            currentPage,
+            progressPercentage: progress,
+            pageCount: numPages,
+          })
+        );
       }
     };
 
@@ -166,69 +301,102 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     };
   }, [bookId, currentPage, numPages]);
 
-  // Render Page to Canvas
-  const renderSinglePage = useCallback(async (pageNum: number, canvasEl: HTMLCanvasElement) => {
-    if (!pdfDoc) return;
-    try {
-      const page = await pdfDoc.getPage(pageNum);
-      const scale = settings.zoom || 1.0;
-      const viewport = page.getViewport({ scale: scale * 1.5 });
-
-      const ctx = canvasEl.getContext('2d');
-      if (!ctx) return;
-
-      canvasEl.height = viewport.height;
-      canvasEl.width = viewport.width;
-
-      const renderContext: any = {
-        canvasContext: ctx,
-        viewport: viewport
-      };
-
-      await page.render(renderContext).promise;
-    } catch (e) {
-      console.warn(`Error rendering page ${pageNum}:`, e);
-    }
-  }, [pdfDoc, settings.zoom]);
-
-  // Render Canvas when Paged Mode or Current Page Changes
+  // Render Page in Single (Paged) Mode
   useEffect(() => {
-    if (pdfDoc && settings.reading_mode === 'paged' && singleCanvasRef.current) {
-      renderSinglePage(currentPage, singleCanvasRef.current);
-    }
-  }, [pdfDoc, currentPage, settings.reading_mode, settings.zoom, renderSinglePage]);
+    let isCancelled = false;
 
-  // Continuous Mode Render All Pages
-  useEffect(() => {
-    if (pdfDoc && settings.reading_mode === 'continuous' && containerRef.current) {
-      const pageContainers = containerRef.current.querySelectorAll('[data-page-num]');
-      pageContainers.forEach(container => {
-        const pNum = parseInt(container.getAttribute('data-page-num') || '0', 10);
-        const canvas = container.querySelector('canvas');
-        if (pNum && canvas) {
-          renderSinglePage(pNum, canvas);
+    async function renderPagedMode() {
+      if (!pdfDoc || settings.reading_mode !== 'paged' || !singleCanvasRef.current) return;
+
+      if (singleRenderTaskRef.current) {
+        try {
+          singleRenderTaskRef.current.cancel();
+        } catch {
+          // ignore
         }
-      });
-    }
-  }, [pdfDoc, settings.reading_mode, settings.zoom, renderSinglePage]);
+        singleRenderTaskRef.current = null;
+      }
 
-  // IntersectionObserver for Continuous Scroll Page Tracking
+      try {
+        const page = await pdfDoc.getPage(currentPage);
+        if (isCancelled || !singleCanvasRef.current) return;
+
+        const dpr = typeof window !== 'undefined' ? Math.min(window.devicePixelRatio || 1, 2) : 1;
+        const scale = (settings.zoom || 1.0) * dpr;
+        const viewport = page.getViewport({ scale: scale * 1.2 });
+
+        const canvas = singleCanvasRef.current;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+
+        const renderContext = {
+          canvasContext: ctx,
+          viewport: viewport,
+        };
+
+        const task = page.render(renderContext);
+        singleRenderTaskRef.current = task;
+        await task.promise;
+      } catch (err: any) {
+        if (err?.name !== 'RenderingCancelledException' && !isCancelled) {
+          console.warn(`Paged mode render error:`, err);
+        }
+      }
+    }
+
+    renderPagedMode();
+
+    return () => {
+      isCancelled = true;
+      if (singleRenderTaskRef.current) {
+        try {
+          singleRenderTaskRef.current.cancel();
+        } catch {
+          // ignore
+        }
+        singleRenderTaskRef.current = null;
+      }
+    };
+  }, [pdfDoc, currentPage, settings.reading_mode, settings.zoom]);
+
+  // IntersectionObserver for Continuous Scroll Page Tracking & Virtualization
   useEffect(() => {
-    if (settings.reading_mode !== 'continuous' || !containerRef.current) return;
+    if (settings.reading_mode !== 'continuous' || !containerRef.current || numPages === 0) return;
 
     const observer = new IntersectionObserver(
       entries => {
-        if (!hasInitialScrolledRef.current) return;
-        entries.forEach(entry => {
-          if (entry.isIntersecting) {
+        setVisiblePageSet(prevSet => {
+          const nextSet = new Set(prevSet);
+          entries.forEach(entry => {
             const pNum = parseInt(entry.target.getAttribute('data-page-num') || '0', 10);
-            if (pNum && pNum !== currentPage) {
-              setCurrentPage(pNum);
+            if (!pNum) return;
+
+            if (entry.isIntersecting) {
+              nextSet.add(pNum);
+              // Pre-buffer adjacent pages for smooth scrolling
+              if (pNum > 1) nextSet.add(pNum - 1);
+              if (pNum < numPages) nextSet.add(pNum + 1);
+
+              if (hasInitialScrolledRef.current && pNum !== currentPage) {
+                setCurrentPage(pNum);
+              }
+            } else {
+              // Un-mount canvas if page is far from active viewport
+              if (Math.abs(pNum - currentPage) > 2) {
+                nextSet.delete(pNum);
+              }
             }
-          }
+          });
+          return nextSet;
         });
       },
-      { threshold: 0.4 }
+      {
+        rootMargin: '350px 0px', // start mounting canvas 350px before entering viewport
+        threshold: 0.1,
+      }
     );
 
     const pageEls = containerRef.current.querySelectorAll('[data-page-num]');
@@ -238,30 +406,33 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   }, [settings.reading_mode, numPages, currentPage]);
 
   // Theme & Width helper styles
-  const widthClasses = {
-    compact: 'max-w-2xl',
-    comfortable: 'max-w-4xl',
-    wide: 'max-w-6xl',
-    full: 'max-w-full px-4'
-  }[settings.page_width] || 'max-w-4xl';
+  const widthClasses =
+    {
+      compact: 'max-w-2xl',
+      comfortable: 'max-w-4xl',
+      wide: 'max-w-6xl',
+      full: 'max-w-full px-4',
+    }[settings.page_width] || 'max-w-4xl';
 
-  const themeBgClasses = {
-    light: 'bg-stone-50 text-stone-900',
-    sepia: 'bg-[#f8f1e5] text-[#433422]',
-    dark: 'bg-[#0f1115] text-stone-100'
-  }[settings.theme] || 'bg-stone-50 text-stone-900';
+  const themeBgClasses =
+    {
+      light: 'bg-stone-50 text-stone-900',
+      sepia: 'bg-[#f8f1e5] text-[#433422]',
+      dark: 'bg-[#0f1115] text-stone-100',
+    }[settings.theme] || 'bg-stone-50 text-stone-900';
 
-  const canvasFilterClass = {
-    light: '',
-    sepia: 'sepia-pdf-canvas',
-    dark: 'dark-pdf-canvas'
-  }[settings.theme] || '';
+  const canvasFilterClass =
+    {
+      light: '',
+      sepia: 'sepia-pdf-canvas',
+      dark: 'dark-pdf-canvas',
+    }[settings.theme] || '';
 
   if (loading) {
     return (
       <div className={`min-h-screen flex flex-col items-center justify-center ${themeBgClasses}`}>
         <Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4" />
-        <p className="font-serif text-base font-medium opacity-70">Opening your book...</p>
+        <p className="font-serif text-base font-medium opacity-80">{loadingProgress}</p>
       </div>
     );
   }
@@ -283,7 +454,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
         className="fixed inset-0 pointer-events-none z-30 transition-opacity"
         style={{
           backgroundColor: 'black',
-          opacity: 1 - Math.max(0.2, Math.min(1.0, settings.brightness))
+          opacity: 1 - Math.max(0.2, Math.min(1.0, settings.brightness)),
         }}
       />
 
@@ -299,20 +470,34 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
             </div>
           </div>
         ) : (
-          /* Continuous Scroll Mode */
+          /* Continuous Scroll Mode (Virtualized Windowing) */
           <div className="space-y-8 my-6 flex flex-col items-center">
-            {Array.from({ length: numPages }, (_, i) => i + 1).map(pNum => (
-              <div
-                key={pNum}
-                data-page-num={pNum}
-                className="shadow-2xl rounded-sm overflow-hidden bg-white w-full flex flex-col items-center"
-              >
-                <canvas className={`max-w-full h-auto ${canvasFilterClass}`} />
-                <div className="py-2 text-[11px] font-mono opacity-40">
-                  Page {pNum} of {numPages}
+            {Array.from({ length: numPages }, (_, i) => i + 1).map(pNum => {
+              const shouldRenderCanvas = visiblePageSet.has(pNum) || Math.abs(pNum - currentPage) <= 1;
+
+              return (
+                <div
+                  key={pNum}
+                  data-page-num={pNum}
+                  className="shadow-xl rounded-sm overflow-hidden bg-white dark:bg-stone-900 w-full flex flex-col items-center min-h-100"
+                  style={!shouldRenderCanvas ? { minHeight: `${Math.round(600 / aspectRatio)}px` } : undefined}
+                >
+                  {shouldRenderCanvas ? (
+                    <SinglePageCanvas
+                      pdfDoc={pdfDoc}
+                      pageNum={pNum}
+                      zoom={settings.zoom}
+                      canvasFilterClass={canvasFilterClass}
+                      numPages={numPages}
+                    />
+                  ) : (
+                    <div className="w-full flex-1 flex flex-col items-center justify-center py-16 opacity-30">
+                      <div className="text-xs font-mono">Page {pNum}</div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
