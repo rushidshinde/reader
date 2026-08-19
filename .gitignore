@@ -45,3 +45,5 @@ next-env.d.ts
 
 # webflow cli build artifacts
 .tmp/
+# next-agents-md
+.next-docs/
