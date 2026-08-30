@@ -146,6 +146,44 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   const hasInitialScrolledRef = useRef<boolean>(false);
   const singleCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const singleRenderTaskRef = useRef<any>(null);
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+
+  // Swipe Gesture Navigation for Paged Mode
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (settings.reading_mode !== 'paged') return;
+    const touch = e.touches[0];
+    touchStartRef.current = {
+      x: touch.clientX,
+      y: touch.clientY,
+      time: Date.now(),
+    };
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (settings.reading_mode !== 'paged' || !touchStartRef.current) return;
+    const touch = e.changedTouches[0];
+    const deltaX = touch.clientX - touchStartRef.current.x;
+    const deltaY = touch.clientY - touchStartRef.current.y;
+    const deltaTime = Date.now() - touchStartRef.current.time;
+
+    touchStartRef.current = null;
+
+    // Minimum distance threshold: 50px, max gesture duration: 500ms
+    // Angle check: Ensure movement is predominantly horizontal
+    if (Math.abs(deltaX) >= 50 && deltaTime <= 500 && Math.abs(deltaX) > Math.abs(deltaY) * 1.25) {
+      if (deltaX < 0) {
+        // Swipe Left -> Next Page
+        if (currentPage < numPages) {
+          setCurrentPage(prev => Math.min(numPages, prev + 1));
+        }
+      } else {
+        // Swipe Right -> Previous Page
+        if (currentPage > 1) {
+          setCurrentPage(prev => Math.max(1, prev - 1));
+        }
+      }
+    }
+  };
 
   // Initialize PDF.js and Load Document (with CacheStorage strategy)
   useEffect(() => {
@@ -461,7 +499,11 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
       <div className={`mx-auto ${widthClasses} transition-all duration-300`} ref={containerRef}>
         {settings.reading_mode === 'paged' ? (
           /* Single Page Mode */
-          <div className="flex flex-col items-center justify-center my-6">
+          <div
+            className="flex flex-col items-center justify-center my-6 touch-pan-y select-none"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+          >
             <div className="shadow-2xl rounded-sm overflow-hidden bg-white">
               <canvas ref={singleCanvasRef} className={`max-w-full h-auto ${canvasFilterClass}`} />
             </div>
