@@ -6,6 +6,8 @@ import { BookRecord } from '@/lib/db';
 import { BookOpen, Search, ArrowUpDown, Loader2, Sparkles, FolderPlus } from 'lucide-react';
 
 import { getApiUrl } from '@/lib/config';
+import { getLocalBooks, saveLocalBooks } from '@/lib/localStorageDB';
+import { syncManager } from '@/lib/syncManager';
 
 type SortOption = 'recently_opened' | 'title' | 'author' | 'progress' | 'recently_added';
 
@@ -16,21 +18,38 @@ export default function HomeLibraryPage() {
   const [sortBy, setSortBy] = useState<SortOption>('recently_opened');
 
   useEffect(() => {
+    // Start 5-minute periodic background sync engine
+    syncManager.startPeriodicSync();
+
     async function loadLibrary() {
-      try {
+      // 1. Local-First: Load instantly from local storage cache
+      const cached = getLocalBooks();
+      if (cached.length > 0) {
+        setBooks(cached);
+        setLoading(false);
+      } else {
         setLoading(true);
+      }
+
+      // 2. Fetch fresh library manifest in background
+      try {
         const res = await fetch(getApiUrl('/api/books'));
         if (res.ok) {
           const data: any = await res.json();
-          setBooks(data.books || []);
+          if (data.books) {
+            setBooks(data.books);
+            saveLocalBooks(data.books);
+          }
         }
       } catch (err) {
-        console.error('Failed to load library:', err);
+        console.warn('[HomeLibraryPage] Offline or remote fetch failed, using cached library:', err);
       } finally {
         setLoading(false);
       }
     }
     loadLibrary();
+
+    return () => syncManager.stopPeriodicSync();
   }, []);
 
   // Most recently opened book for "Continue Reading"

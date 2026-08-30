@@ -5,6 +5,7 @@ import { Loader2, AlertCircle } from 'lucide-react';
 import { ReaderSettings } from '@/lib/db';
 import { getApiUrl, getAssetUrl } from '@/lib/config';
 import { getPdfArrayBuffer } from '@/lib/pdfCache';
+import { saveLocalProgress } from '@/lib/localStorageDB';
 
 interface PdfViewerProps {
   url: string;
@@ -278,29 +279,12 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     }
   }, [targetPage, numPages, settings.reading_mode]);
 
-  // Save Progress Function (Debounced)
+  // Save Progress Function (Local-First)
   const saveProgress = useCallback(
     (pageToSave: number, total: number) => {
       if (!bookId || !total) return;
       const progress = Math.min(100, Math.round((pageToSave / total) * 100 * 10) / 10);
-
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-
-      saveTimeoutRef.current = setTimeout(() => {
-        fetch(getApiUrl('/api/progress'), {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            bookId,
-            currentPage: pageToSave,
-            progressPercentage: progress,
-            pageCount: total,
-          }),
-          keepalive: true,
-        }).catch(err => console.warn('Failed to auto-save progress:', err));
-      }, 1000);
+      saveLocalProgress(bookId, pageToSave, progress, total);
     },
     [bookId]
   );

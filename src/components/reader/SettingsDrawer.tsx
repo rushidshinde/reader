@@ -1,8 +1,9 @@
 'use client';
 
-import React from 'react';
-import { X, Sun, Moon, Maximize2, Minimize2, ZoomIn, ZoomOut, Monitor, Layers } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { X, Sun, Moon, Maximize2, Minimize2, ZoomIn, ZoomOut, Monitor, Layers, RefreshCw, CheckCircle2, CloudOff, AlertCircle } from 'lucide-react';
 import { ReaderSettings } from '@/lib/db';
+import { syncManager, SyncState } from '@/lib/syncManager';
 
 interface SettingsDrawerProps {
   isOpen: boolean;
@@ -21,7 +22,35 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   isFullscreen,
   onToggleFullscreen
 }) => {
+  const [syncState, setSyncState] = useState<SyncState>('synced');
+  const [lastSyncTime, setLastSyncTime] = useState<number>(0);
+  const [pendingCount, setPendingCount] = useState<number>(0);
+  const [manualSyncing, setManualSyncing] = useState<boolean>(false);
+
+  useEffect(() => {
+    const unsubscribe = syncManager.subscribe((state, lastSync, count) => {
+      setSyncState(state);
+      setLastSyncTime(lastSync);
+      setPendingCount(count);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleManualSync = async () => {
+    setManualSyncing(true);
+    await syncManager.performFullSync();
+    setManualSyncing(false);
+  };
+
   if (!isOpen) return null;
+
+  const formatLastSync = (ts: number) => {
+    if (!ts) return 'Never synced';
+    const diffSec = Math.floor((Date.now() - ts) / 1000);
+    if (diffSec < 60) return 'Just now';
+    if (diffSec < 3600) return `${Math.floor(diffSec / 60)} min ago`;
+    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm transition-opacity">
@@ -39,6 +68,58 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Database Sync */}
+          <div className="p-4 rounded-2xl bg-stone-100/70 dark:bg-stone-800/50 border border-stone-200/80 dark:border-stone-750">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">
+                Database Sync
+              </label>
+              <span className="text-[11px] font-mono text-stone-500 dark:text-stone-400">
+                {formatLastSync(lastSyncTime)}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs font-medium">
+                {syncState === 'syncing' || manualSyncing ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />
+                    <span className="text-blue-500 font-semibold">Syncing with DB...</span>
+                  </>
+                ) : syncState === 'offline' ? (
+                  <>
+                    <CloudOff className="w-4 h-4 text-amber-500" />
+                    <span className="text-amber-500 font-medium">Offline ({pendingCount} unsynced)</span>
+                  </>
+                ) : syncState === 'pending' ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 text-amber-500" />
+                    <span className="text-amber-500 font-medium">{pendingCount} local changes pending</span>
+                  </>
+                ) : syncState === 'error' ? (
+                  <>
+                    <AlertCircle className="w-4 h-4 text-red-500" />
+                    <span className="text-red-500 font-medium">Sync error</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Database Synced</span>
+                  </>
+                )}
+              </div>
+
+              <button
+                onClick={handleManualSync}
+                disabled={syncState === 'syncing' || manualSyncing}
+                className="py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 shrink-0"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${syncState === 'syncing' || manualSyncing ? 'animate-spin' : ''}`} />
+                <span>Sync Now</span>
+              </button>
+            </div>
+          </div>
+
           {/* Theme */}
           <div>
             <label className="block text-xs font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-3">
